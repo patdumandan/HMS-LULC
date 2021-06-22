@@ -1,0 +1,209 @@
+---
+title: "HMS_LULC project"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(dplyr)
+library(reshape2)
+require(tidyr)
+require(mgcv)
+```
+
+I. **Research Question**  
+*With different levels of specialization for a habitat type (open/urban/forest) among migrating raptors recorded in HMS, PA, how do the associations of species' counts with changes in estimates of land-use type differ between species with similar habitats (i.e., how is the association between pasture land and open area species like AMKE and NOHA different from each other?)?*  
+
+II. **Analysis Plan**  
+* select two species that are usually considered as open area/forest/urban-dwelling but with relatively different diet specialization indices (so we could make a case that maybe one species has a stronger association with a given land-use type than the other because it has a lower diet specialization--more likely to just keep foraging in same habitat):  
+  * open (i.e., pasture): AMKE (habitat: 11, diet: 0.8), NOHA (habitat: 7, diet: 1.23)  
+  * forest: SSHA (habitat: 9, diet: 0.33), NOGO (habitat: 4, diet: 1.05)  
+  * urban: COHA (habitat: 4,diet: 1.05), MERL (habitat: 6,diet: 0.69)  
+  
+* build separate GAMs for each species, with the general model form:  
+
+$$ 
+ \begin{align*}
+ 
+ Y_{ij} \sim NB \ (\mu_{ij}, \ \sigma_{ij}) \qquad \text{(Eqn.1)} \\
+\mu_{ij} = \alpha + (\beta_{1}*year)+ (f_1(\beta_2*X)) + K \qquad \text { (Eqn. 2)}
+
+\end{align*}
+$$  
+In Eqn. 1, Y is the species-specific count of species *i* in year *j*, which follows a negative binomial distribution with the parameters \(\mu\) and \(\sigma\). The \(\sigma\) accounts for overdispersion in the counts, while \(\mu\) is a function of an intercept (baseline number of individuals), a slope parameter for the effect of year (long-term trend), smoothed terms for non-linear relationship with land-use type *X*, and an offset term (*K*) for the observation effort (no.of hours of observation in a given year;Eqn. 2).  
+
+*Note: here we set a lag of 5 for the migration counts to make it similar with the frequency of the land-use type data, and to account for temporal autocorrelation.* 
+
+```{r include=F}
+for_dat=read_excel("./Data/MLU-USDA_ERS.xlsx", sheet="forest")%>%mutate(type="forest")
+urb_dat=read_excel("./Data/MLU-USDA_ERS.xlsx", sheet="urban")%>%mutate(type="urban")
+past_dat=read_excel("./Data/MLU-USDA_ERS.xlsx", sheet="pasture")%>%mutate(type="pasture")
+crop_dat=read_excel("./Data/MLU-USDA_ERS.xlsx", sheet="cropland")%>%mutate(type="cropland")
+specuse_dat=read_excel("./Data/MLU-USDA_ERS.xlsx", sheet="specialuses")%>%mutate(type="special use")
+othr_dat=read_excel("./Data/MLU-USDA_ERS.xlsx", sheet="othrland")%>%mutate(type="other")
+
+full_dat_lulc=rbind(for_dat, urb_dat, past_dat, crop_dat, specuse_dat,othr_dat)
+
+lulc_dat=melt(full_dat_lulc, id=c("type", "Regions and States"))%>%
+  rename(year=variable, region=`Regions and States`)%>%
+  filter(region=="Northeast")%>%
+  mutate(year=as.integer(as.character(year)))
+
+count_dat=read.csv("./Data/HMScount-1946to2018.csv")
+
+count_dat=count_dat%>%
+  mutate(year=as.integer(as.character(count_dat$year)))
+
+full_dat=full_join(lulc_dat, count_dat, by="year")%>%drop_na()%>%
+  select(year, species,count, type, value, obs.hours)%>%
+  reshape2::dcast(year+species+count+obs.hours~type)%>%
+  mutate(cropland=as.numeric(cropland), forest=as.numeric(forest), other=as.numeric(other),
+         pasture=as.numeric(pasture), urban=as.numeric(urban))%>%
+  select(-`special use`)
+```
+
+```{r echo=F}
+str(full_dat)
+```
+
+III. *Results*  
+
+A. Land-use  
+```{r echo=F, fig.cap="Fig. 1. Long-term trends in total estimated size (acres) of forested area in Northeastern US"}
+plot(full_dat$forest~full_dat$year)
+abline(lm(full_dat$forest~full_dat$year), col="blue")
+```  
+
+```{r echo=F, fig.cap="Fig. 1. Long-term trends in total estimated size (acres) of agricultural area (pasture) in Northeastern US"}
+plot(full_dat$pasture~full_dat$year)
+abline(lm(full_dat$pasture~full_dat$year), col="blue")
+```  
+
+```{r echo=F, fig.cap="Fig. 1. Long-term trends in total estimated size (acres) of urban area in Northeastern US"}
+plot(full_dat$urban~full_dat$year)
+abline(lm(full_dat$urban~full_dat$year), col="blue")
+```  
+
+**Notes**  
+* non-linear increase in forested area, past 2000s looks like it plateaus  
+* decline in pasture area starting from 1970s
+* steep increase in urban area since 1950s  
+
+B. Habitat Associations  
+
+1. forest species (SSHA, NOGO)  
+```{r include=F}
+
+full_dat$years = (full_dat$year - mean(full_dat$year))/(2 *sd(full_dat$year))
+full_dat$stdpasture = (full_dat$pasture - mean(full_dat$pasture))/(2 *sd(full_dat$pasture))
+full_dat$stdcrop= (full_dat$cropland - mean(full_dat$cropland))/(2 *sd(full_dat$cropland))
+full_dat$stdforest = (full_dat$forest - mean(full_dat$forest))/(2 *sd(full_dat$forest))
+full_dat$stdurban = (full_dat$urban - mean(full_dat$urban))/(2 *sd(full_dat$urban))
+
+nogo=full_dat%>%filter(species=="NOGO")
+ssha=full_dat%>%filter(species=="SSHA")
+```  
+
+```{r echo=F}
+
+m1=gam(count~s(stdforest)+years+offset(log(obs.hours)), data=nogo, family =nb(theta = NULL, link = "log"))
+m2=gam(count~s(stdforest)+years+offset(log(obs.hours)), data=ssha, family =nb(theta = NULL, link = "log"))
+```
+
+```{r echo=F}
+summary(m1)
+```  
+```{r echo=F, fig.cap= "GAM plot of the relationship between the smoothed term for forest area and counts of migrating northern goshawks counted in HMS"}
+
+plot.gam(m1, shade=T)
+
+```  
+
+**FOREST-NOGO relationship**: model suggests non-significant negative linear relationship between forest and NOGO. this may be because during the time when NOGOs were declining (evidenced by a negative year effect:-0.29), forest area size was increasing. However, model is not really good at explaining all the deviation with only 22.7% of the deviance explained.  
+
+```{r echo=F}
+summary(m2)
+```  
+**FOREST-SSHA relationship**: model suggests non-significant non-linear relationship between forest and SSHA counts. potentially the overlap in SSHA recovery from DDT and increase in forest cover may be contributing to the nonlinearity in trend relationships. Model also has low explanatory power at only 45.8%.  
+
+```{r echo=F, fig.cap= "GAM plot of the relationship between the smoothed term for forest area and counts of migrating sharp-shinned hawks counted in HMS"}
+
+plot.gam(m2, shade=T)
+
+```
+
+2. open area species (AMKE, NOHA)  
+
+```{r include=F}
+amke=full_dat%>%filter(species=="AMKE")
+noha=full_dat%>%filter(species=="NOHA")
+```  
+
+```{r echo=F}
+
+m3=gam(count~s(stdpasture)+years+offset(log(obs.hours)), data=amke, family =nb(theta = NULL, link = "log"))
+m4=gam(count~s(stdpasture)+years+offset(log(obs.hours)), data=noha, family =nb(theta = NULL, link = "log"))
+```  
+
+```{r echo=F}
+summary(m3)
+```  
+**PASTURE-AMKE relationship**: significant non-linear relationship between AMKE count and pasture area. AMKE counts at this lag seem to suggest increasing trends. meanwhile, pasture trends are declining around same time period, which may explain the negative association. model only explains 43.3% of the variation in the data. 
+
+```{r echo=F}  
+plot(amke$count~amke$year)
+abline(lm(amke$count~amke$year))
+```
+
+```{r echo=F, fig.cap= "GAM plot of the relationship between the smoothed term for pasture area and counts of migrating American kestrels counted in HMS"}
+
+plot.gam(m3, shade=T)
+
+```
+
+```{r echo=F}
+summary(m4)
+```   
+**PASTURE-NOHA relationship**: non-significant linear relationship between pasture and NOHA counts. but model suggests significant declining trends in counts (\(\beta\)=-0.45, *p*=0.01). model explains only 37.4% of the variation.  
+
+```{r echo=F, fig.cap= "GAM plot of the relationship between the smoothed term for pasture area and counts of migrating northern harriers counted in HMS"}
+
+plot.gam(m4, shade=T)
+
+```  
+
+3. urban species (COHA, MERL)
+
+```{r include=F}
+
+coha=full_dat%>%filter(species=="COHA")
+merl=full_dat%>%filter(species=="MERL")
+
+```  
+
+```{r echo=F}
+
+m5=gam(count~s(stdurban)+years+offset(log(obs.hours)), data=coha, family =nb(theta = NULL, link = "log"))
+m6=gam(count~s(stdurban)+years+offset(log(obs.hours)), data=merl, family =nb(theta = NULL, link = "log"))
+```  
+
+```{r echo=F}
+
+summary(m5)
+```  
+**URBAN-COHA relationship**: non-significant non-linear (cubic) relationship between urban area and COHA. Model is somehow good at explaining variation (73.1%). maybe reforestation in NE US also good for COHAs? so it's not just the urban area increase that benefits them (positive long-term trend also indicates this: \(\beta\)=0.94).  
+
+```{r echo=F,fig.cap= "GAM plot of the relationship between the smoothed term for urban area and counts of migrating Cooper's hawk counted in HMS"}
+plot.gam(m5, shade=T)
+
+```
+
+```{r echo=F}
+summary (m6)
+```  
+
+**URBAN-MERL relationship**: significant non-linear relationship (up to 4th term so..quadratic?) between merlin and urban area. model suggests that merlins are definitely benefiting from uran area increase in NE US states. also, really good explanatory power (92.3%).  
+
+```{r echo=F,fig.cap= "GAM plot of the relationship between the smoothed term for urban area and counts of migrating merlin counted in HMS"}
+plot.gam(m6, shade=T)
+
+```
