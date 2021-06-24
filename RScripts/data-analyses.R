@@ -43,7 +43,7 @@ coha=full_dat%>%filter(species=="COHA")
 merl=full_dat%>%filter(species=="MERL")
 
 m5=gam(count~s(stdurban)+years+offset(log(obs.hours)), data=coha, family =nb(theta = NULL, link = "log"))
-m6=gam(count~s(stdurban)+years+offset(log(obs.hours)), data=pefa, family =nb(theta = NULL, link = "log"))
+m6=gam(count~s(stdurban)+years+offset(log(obs.hours)), data=merl, family =nb(theta = NULL, link = "log"))
 
 plot.gam(m5, shade=T)
 plot.gam(m6, shade=T)
