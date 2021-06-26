@@ -17,7 +17,7 @@ full_data$stdforest = (full_data$weighed.forest - mean(full_data$weighed.forest)
 amke=full_data%>%filter(species=="AMKE")
 noha=full_data%>%filter(species=="NOHA")
 coha=full_data%>%filter(species=="COHA")
-merl=full_data%>%filter(species=="MERL")
+rtha=full_data%>%filter(species=="RTHA")
 ssha=full_data%>%filter(species=="SSHA")
 nogo=full_data%>%filter(species=="NOGO")
 
@@ -26,16 +26,17 @@ m2=gam(count~s(stdpasture)+s(years)+offset(log(obs.hours)), data=noha, method="R
 m3=gam(count~s(stdforest)+s(years)+offset(log(obs.hours)), data=nogo, method="REML",family =nb(theta = NULL, link = "log"))
 m4=gam(count~s(stdforest)+s(years)+offset(log(obs.hours)), data=ssha, method="REML",family =nb(theta = NULL, link = "log"))
 m5=gam(count~s(stdurban)+s(years)+offset(log(obs.hours)), data=coha, method="REML",family =nb(theta = NULL, link = "log"))
-m6=gam(count~s(stdurban)+s(years)+offset(log(obs.hours)), data=merl, method="REML",family =nb(theta = NULL, link = "log"))
+m6=gam(count~stdurban+years+offset(log(obs.hours)), data=rtha, method="REML", family =nb(theta = NULL, link = "log"))
 
-plot.gam(m3, shade=T, pages=1, jit=T, residuals=T)
+plot.gam(m6, shade=T, pages=1, jit=T, residuals=T)
 summary(m6)
 
 #model viz####
 
-visreg(m1, xvar="stdpasture",type="conditional",scale="response", jitter=TRUE, line=list(col="black"),fill=list(col="gray"))
+visreg(m6, xvar="stdurban",type="conditional",scale="response", jitter=TRUE, line=list(col="black"),fill=list(col="gray"))
 
 #PERIODS OF CHANGE FOR LULC####
+
 tmpf <- tempfile()
 download.file("https://gist.github.com/gavinsimpson/e73f011fdaaab4bb5a30/raw/82118ee30c9ef1254795d2ec6d356a664cc138ab/Deriv.R",tmpf)
 source(tmpf)
@@ -135,11 +136,10 @@ AIC(m1b)
 AIC(m1c)
 AIC(m1d)
 
-
 summary(m1a)
 summary(m1b)
 summary(m1c)
 summary(m1d)
 
 visreg(m6, "stdurban", jitter=TRUE, line=list(col="black"),fill=list(col="gray"),
-       xlab="standardized urban cover", main="Merlin")
+       xlab="standardized urban cover", main="Red-tailed Hawk")
