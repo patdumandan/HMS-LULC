@@ -26,14 +26,17 @@ m2=gam(count~s(stdpasture)+s(years)+offset(log(obs.hours)), data=noha, method="R
 m3=gam(count~s(stdforest)+s(years)+offset(log(obs.hours)), data=nogo, method="REML",family =nb(theta = NULL, link = "log"))
 m4=gam(count~s(stdforest)+s(years)+offset(log(obs.hours)), data=ssha, method="REML",family =nb(theta = NULL, link = "log"))
 m5=gam(count~s(stdurban)+s(years)+offset(log(obs.hours)), data=coha, method="REML",family =nb(theta = NULL, link = "log"))
-m6=gam(count~stdurban+years+offset(log(obs.hours)), data=rtha, method="REML", family =nb(theta = NULL, link = "log"))
+m6=gam(count~s(stdurban)+s(years)+offset(log(obs.hours)), data=rtha, method="REML", family =nb(theta = NULL, link = "log"))
 
-plot.gam(m6, shade=T, pages=1, jit=T, residuals=T)
+plot.gam(m1, shade=T, jit=T, select=1, bty="n",pch=20, font.main = 1,res=1200, xlab="Pasture",main="American Kestrel")
+box(bty="l", lwd=2)
+title("C", adj=0)
 summary(m6)
 
 #model viz####
 
-visreg(m6, xvar="stdurban",type="conditional",scale="response", jitter=TRUE, line=list(col="black"),fill=list(col="gray"))
+visreg(m6, xvar="stdurban",type="conditional",scale="response", jitter=T,
+       trans=exp, line=list(col="black"),fill=list(col="gray"), xlab="urban")
 
 #PERIODS OF CHANGE FOR LULC####
 
@@ -62,68 +65,47 @@ plot.Deriv(p1.d, sizer=T, term=Term, ylab="f'(year)")
 summary(forest)
 
 ylim <- with(pdat1, range(upper, lower, p1))
-plot(p1~year, data=pdat1, type="n", ylim=ylim, ylab="proportional cover of forest (standardized)")
+plot(p1~year, data=pdat1, type="n", ylim=ylim, ylab="forest",
+     bty="n")
+box(bty="l", lwd=2)
+lines(p1~year, data=pdat1)
+
 lines(p1~year, data=pdat1)
 lines(upper~year, data=pdat1, lty="dashed")
 lines(lower~year, data=pdat1, lty="dashed")
-lines(unlist(p1.dsig$incr) ~ year, data = pdat1, col = "blue", lwd = 3)
-lines(unlist(p1.dsig$decr) ~ year, data = pdat1, col = "red", lwd = 3)
+lines(unlist(p1.dsig$incr) ~ year, data = pdat1, col = "grey", lwd = 3)
+lines(unlist(p1.dsig$decr) ~ year, data = pdat1, col = "black", lwd = 3)
 
-#pasture####
+#urban####
 
-past=gam(amke$pasture.cov~s(year), data=amke, method="REML")
+urb=gam(amke$urban.cov~s(year), data=amke, method="REML")
 
 
 want=seq(1, nrow(amke), length.out = 200)
 pdat2=with(amke, data.frame(year=year[want]))
-p2=predict(past, newdata=pdat2, type="terms", se.fit = TRUE)
+p2=predict(urb, newdata=pdat2, type="terms", se.fit = TRUE)
 pdat2=transform(pdat2, p2=p2$fit[,1], se2=p2$se.fit[,1]) #p2=fit, se2=std.error
-df.res=df.residual(past)
+df.res=df.residual(forest)
 crit.t=qt(0.025, df.res, lower.tail = F)
 pdat2=transform(pdat2, upper=p2+(crit.t*se2), lower=p2-(crit.t*se2))
-p2.d <- Deriv(past)
+
+p2.d <- Deriv(urb)
 Term="year"
 p2.dci <- confint(p2.d, term = Term)
 p2.dsig <- signifD(pdat2$p2, d = p2.d[[Term]]$deriv,
                    +p2.dci[[Term]]$upper, p2.dci[[Term]]$lower)
 plot.Deriv(p2.d, sizer=T, term=Term, ylab="f'(year)")
-summary(past)
+summary(forest)
 
 ylim <- with(pdat2, range(upper, lower, p2))
-plot(p2~year, data=pdat2, type="n", ylim=ylim, ylab="proportional cover of pasture (standardized)")
+plot(p2~year, data=pdat2, type="n", ylim=ylim, ylab="urban",
+     bty="n")
+box(bty="l", lwd=2)
 lines(p2~year, data=pdat2)
 lines(upper~year, data=pdat2, lty="dashed")
 lines(lower~year, data=pdat2, lty="dashed")
-lines(unlist(p2.dsig$incr) ~ year, data = pdat2, col = "blue", lwd = 3)
-lines(unlist(p2.dsig$decr) ~ year, data = pdat2, col = "red", lwd = 3)
-
-#urban####
-
-urban=gam(amke$urban.cov~s(year), data=amke, method="REML")
-
-
-want=seq(1, nrow(amke), length.out = 200)
-pdat3=with(amke, data.frame(year=year[want]))
-p3=predict(urban, newdata=pdat3, type="terms", se.fit = TRUE)
-pdat3=transform(pdat3, p3=p3$fit[,1], se3=p3$se.fit[,1]) #p2=fit, se2=std.error
-df.res=df.residual(urban)
-crit.t=qt(0.025, df.res, lower.tail = F)
-pdat3=transform(pdat3, upper=p3+(crit.t*se3), lower=p3-(crit.t*se3))
-p3.d <- Deriv(urban)
-Term="year"
-p3.dci <- confint(p3.d, term = Term)
-p3.dsig <- signifD(pdat3$p3, d = p3.d[[Term]]$deriv,
-                   +p3.dci[[Term]]$upper, p3.dci[[Term]]$lower)
-plot.Deriv(p3.d, sizer=T, term=Term, ylab="f'(year)")
-summary(urban)
-
-ylim <- with(pdat3, range(upper, lower, p3))
-plot(p3~year, data=pdat3, type="n", ylim=ylim, ylab="proportional cover of urban (standardized)")
-lines(p3~year, data=pdat3)
-lines(upper~year, data=pdat3, lty="dashed")
-lines(lower~year, data=pdat3, lty="dashed")
-lines(unlist(p3.dsig$incr) ~ year, data = pdat3, col = "blue", lwd = 3)
-lines(unlist(p3.dsig$decr) ~ year, data = pdat3, col = "red", lwd = 3)
+lines(unlist(p2.dsig$incr) ~ year, data = pdat2, col = "grey", lwd = 3)
+lines(unlist(p2.dsig$decr) ~ year, data = pdat2, col = "black", lwd = 3)
 
 #MODEL PERFORMANCE EVALUATION####
 m1a=gam(count~s(stdurban)+s(years)+offset(log(obs.hours)), data=merl, method="REML",family =nb(theta = NULL, link = "log"))
